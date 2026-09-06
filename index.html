@@ -7,44 +7,45 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap">
 <style>
-  :root{ --go:#1f8a5b; --short:#8a8f8c; --ink:#182320; --muted:#5a6763; --line:#d6ded7;
-         --bg:#ffffff; --panel:rgba(255,255,255,.96); --gsi:#b97f25; }
+  :root{ --go:#1f8a5b; --short:#8a8f8c; --avoid:#c47d1a; --ink:#182320; --muted:#5a6763;
+         --line:#d6ded7; --panel:rgba(255,255,255,.97); }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;font-family:"Noto Sans JP",system-ui,sans-serif;color:var(--ink)}
-  #map{position:absolute;inset:0}
+  #map{position:absolute;inset:0;background:#eef2ee}
   .brand{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900}
   .panel{position:absolute;z-index:1000;background:var(--panel);backdrop-filter:blur(6px);
     border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.12)}
-  #ctl{top:12px;left:12px;width:min(330px,calc(100vw - 24px));padding:16px 16px 14px}
-  #ctl h1{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:24px;margin:0 0 2px}
-  #ctl .sub{font-size:12px;color:var(--muted);margin:0 0 12px}
-  .step{font-size:13px;color:var(--muted);margin:0 0 10px;line-height:1.7}
-  .step b{color:var(--ink)}
-  .btns{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 2px}
+  #ctl{top:12px;left:12px;width:min(340px,calc(100vw - 24px));padding:15px 16px 13px}
+  #ctl h1{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:23px;margin:0 0 2px}
+  #ctl .sub{font-size:12px;color:var(--muted);margin:0 0 11px}
+  #hint{font-size:13px;color:var(--muted);margin:0 0 11px;line-height:1.65;min-height:1.6em}
+  #hint b{color:var(--ink)}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
   button{font-family:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);
-    background:#fff;color:var(--ink);padding:8px 12px;border-radius:9px;cursor:pointer}
-  button:hover{border-color:var(--go);color:var(--go)}
-  button.on{background:var(--go);color:#fff;border-color:var(--go)}
-  .row{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:9px}
-  .row input{accent-color:var(--go)}
+    background:#fff;color:var(--ink);padding:9px 12px;border-radius:10px;cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--go)}
+  button.arm{background:var(--go);color:#fff;border-color:var(--go)}
+  button .pindot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  #bStart .pindot{background:var(--go)} #bEnd .pindot{background:#b3261e}
+  button.arm .pindot{background:#fff}
+  .toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+  .toggles button{font-size:12px;font-weight:500;padding:7px 10px}
+  .toggles button.on{background:#f0f6f2;border-color:var(--go);color:var(--go);font-weight:700}
   #res{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;display:none}
   #res.show{display:block}
   .cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .cmp .c{border:1px solid var(--line);border-radius:10px;padding:10px}
-  .cmp .lab{font-size:11px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:6px}
+  .cmp .lab{font-size:11px;font-weight:700;display:flex;align-items:center;gap:6px}
   .sw{width:16px;height:4px;border-radius:2px;display:inline-block}
-  .cmp .big{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:20px;margin-top:4px;
-    font-variant-numeric:tabular-nums}
-  .cmp .k{font-size:11px;color:var(--muted);margin-top:4px}
-  .verdict{font-size:12.5px;color:var(--muted);margin-top:10px}
-  .verdict b{color:var(--go)}
+  .cmp .big{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:20px;margin-top:4px;font-variant-numeric:tabular-nums}
+  .cmp .k{font-size:11px;color:var(--muted);margin-top:3px}
+  .verdict{font-size:12.5px;color:var(--muted);margin-top:10px}.verdict b{color:var(--go)}
+  .credit{margin-top:11px;font-size:11px;color:var(--muted)}
   #legend{bottom:12px;left:12px;padding:10px 13px;font-size:12px;color:var(--muted)}
   #legend .li{display:flex;align-items:center;gap:8px;margin:3px 0}
   #banner{position:absolute;z-index:1001;top:12px;left:50%;transform:translateX(-50%);
-    background:#b3261e;color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;display:none;max-width:92vw}
-  .credit{margin-top:12px;font-size:11px;color:var(--muted)}
-  .credit a{color:var(--go)}
-  @media(max-width:560px){ #ctl{top:8px;left:8px} #legend{display:none} }
+    background:#333;color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;display:none;max-width:92vw}
+  @media(max-width:560px){ #legend{display:none} }
 </style>
 </head>
 <body>
@@ -54,137 +55,142 @@
 <div id="ctl" class="panel">
   <h1><span class="brand">みちなり</span> デモ</h1>
   <p class="sub">自転車の「快適ルート」を、その場で試す</p>
-  <p class="step" id="hint"><b>① 地図で出発地をクリック</b> → <b>② 到着地をクリック</b>。快適ルート（緑）と最短ルート（灰）を比べます。</p>
+  <p id="hint"><b>出発地</b>ボタンを押して地図をタップ → 次に<b>到着地</b>。ピンはドラッグで微調整できます。</p>
   <div class="btns">
-    <button id="clear">クリア</button>
-    <button id="toggleNet">快適スコアを表示</button>
+    <button id="bStart"><span class="pindot"></span>出発地</button>
+    <button id="bEnd"><span class="pindot"></span>到着地</button>
+    <button id="bClear">クリア</button>
+  </div>
+  <div class="toggles">
+    <button id="tAvoid" class="on">避けたい道を表示</button>
   </div>
   <div id="res">
     <div class="cmp">
       <div class="c"><div class="lab"><span class="sw" style="background:var(--short)"></span>最短</div>
-        <div class="big" id="sD">–</div><div class="k" id="sK">距離</div></div>
+        <div class="big" id="sD">–</div><div class="k">距離</div></div>
       <div class="c"><div class="lab"><span class="sw" style="background:var(--go)"></span>快適</div>
-        <div class="big" id="gD">–</div><div class="k" id="gK">距離</div></div>
+        <div class="big" id="gD">–</div><div class="k">距離</div></div>
     </div>
     <div class="verdict" id="verdict"></div>
   </div>
-  <p class="credit">道路網：OpenStreetMap ／ 標高：国土地理院 ／ 地図：地理院地図。研究・プロトタイプ段階のデモ（制作 ash4）。</p>
+  <p class="credit">検索できる範囲＝地図の緑枠内。道路網：OpenStreetMap／標高：国土地理院／地図：地理院地図。研究・プロトタイプ段階のデモ（制作 ash4）。</p>
 </div>
 
 <div id="legend" class="panel">
   <div class="li"><span class="sw" style="background:var(--go);width:22px;height:5px"></span>快適ルート</div>
   <div class="li"><span class="sw" style="background:var(--short);width:22px;height:5px"></span>最短ルート</div>
-  <div class="li"><span class="sw" style="background:var(--gsi);width:22px;height:5px"></span>避けたい道（幹線・バス通り）</div>
+  <div class="li"><span class="sw" style="background:var(--avoid);width:22px;height:5px"></span>避けたい道（幹線・バス通り）</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-const banner=(m)=>{const b=document.getElementById('banner');b.textContent=m;b.style.display='block';};
-const map=L.map('map',{zoomControl:true}).setView([35.749,139.60],14);
-L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
-  {attribution:'国土地理院',maxZoom:18}).addTo(map);
+const banner=(m,show=true)=>{const b=document.getElementById('banner');b.textContent=m;b.style.display=show?'block':'none';};
+const map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([35.74,139.62],13);
+L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{attribution:'国土地理院',maxZoom:18}).addTo(map);
 
-let NODES={}, ADJ={}, EDGES=[], NIDS=[];
-let netLayer=null, netOn=false;
-let picks=[], marks=[], routeLayers=[];
-const CELL=0.003; let GRID={};   // 格子インデックス（最近傍を高速化）
+let NODES={}, ADJ={}, EDGES=[], NIDS=[], GRID={}; const CELL=0.003;
+let startNode=null, endNode=null, startMk=null, endMk=null, mode=null;
+let routeLayers=[], avoidLayer=null;
 
 banner('道路データを読み込み中…');
 fetch('graph.json').then(r=>{if(!r.ok)throw 0;return r.json();}).then(g=>{
   NODES=g.nodes;
   for(const [u,v,len,cc,pen,bus] of g.edges){
-    (ADJ[u]=ADJ[u]||[]).push([v,len,cc]);
-    (ADJ[v]=ADJ[v]||[]).push([u,len,cc]);
+    (ADJ[u]=ADJ[u]||[]).push([v,len,cc]); (ADJ[v]=ADJ[v]||[]).push([u,len,cc]);
     EDGES.push([u,v,pen,bus]);
   }
   NIDS=Object.keys(NODES);
   let laMin=90,laMax=-90,loMin=180,loMax=-180;
   for(const id of NIDS){const n=NODES[id];
-    if(n[0]<laMin)laMin=n[0]; if(n[0]>laMax)laMax=n[0];
-    if(n[1]<loMin)loMin=n[1]; if(n[1]>loMax)loMax=n[1];
+    if(n[0]<laMin)laMin=n[0]; if(n[0]>laMax)laMax=n[0]; if(n[1]<loMin)loMin=n[1]; if(n[1]>loMax)loMax=n[1];
     const k=Math.round(n[0]/CELL)+'_'+Math.round(n[1]/CELL); (GRID[k]=GRID[k]||[]).push(id);
   }
+  // 検索できる範囲：外側を薄暗く＋緑枠
+  const world=[[-85,-185],[85,-185],[85,185],[-85,185]];
+  const hole=[[laMin,loMin],[laMin,loMax],[laMax,loMax],[laMax,loMin]];
+  L.polygon([world,hole],{stroke:false,fillColor:'#1a2b26',fillOpacity:.13,interactive:false}).addTo(map);
+  L.rectangle([[laMin,loMin],[laMax,loMax]],{color:'#1f8a5b',weight:2,dashArray:'7 6',fill:false,interactive:false}).addTo(map);
+  // 避けたい道（幹線・バス通り）レイヤ（デフォルト表示）
+  avoidLayer=L.layerGroup();
+  for(const [u,v,pen,bus] of EDGES){ if(!(bus||pen>=4))continue; const a=NODES[u],b=NODES[v]; if(a&&b)
+    L.polyline([a,b],{color:'#c47d1a',weight:2.5,opacity:.7,interactive:false}).addTo(avoidLayer); }
+  avoidLayer.addTo(map);
   map.fitBounds([[laMin,loMin],[laMax,loMax]]);
-  document.getElementById('banner').style.display='none';
+  banner('',false);
+  setMode('start');
 }).catch(()=>banner('graph.json が読み込めません。index.html と同じ場所に置いてください。'));
 
 function nearest(lat,lon){
-  const cx=Math.round(lat/CELL), cy=Math.round(lon/CELL);
-  let best=null,bd=1e18,extra=0;
+  const cx=Math.round(lat/CELL),cy=Math.round(lon/CELL); let best=null,bd=1e18,extra=0;
   for(let r=0;r<=40;r++){
-    for(let i=-r;i<=r;i++)for(let j=-r;j<=r;j++){
-      if(Math.max(Math.abs(i),Math.abs(j))!==r)continue;   // 外周リングだけ走査
-      const b=GRID[(cx+i)+'_'+(cy+j)];
-      if(b)for(const id of b){const n=NODES[id];const d=(n[0]-lat)**2+(n[1]-lon)**2;if(d<bd){bd=d;best=id;}}
-    }
-    if(best){ if(extra>=1) break; extra++; }               // 最初のヒット後もう1周だけ広げて確定
-  }
+    for(let i=-r;i<=r;i++)for(let j=-r;j<=r;j++){ if(Math.max(Math.abs(i),Math.abs(j))!==r)continue;
+      const b=GRID[(cx+i)+'_'+(cy+j)]; if(b)for(const id of b){const n=NODES[id];const d=(n[0]-lat)**2+(n[1]-lon)**2;if(d<bd){bd=d;best=id;}} }
+    if(best){ if(extra>=1)break; extra++; } }
   return best;
 }
-// simple binary-heap Dijkstra; wkey: 1=length index, 2=comfort index
 function dijkstra(src,dst,wi){
   const dist={},prev={};const H=[[0,src]];dist[src]=0;
   const push=(d,n)=>{H.push([d,n]);let i=H.length-1;while(i>0){let p=(i-1>>1);if(H[p][0]<=H[i][0])break;[H[p],H[i]]=[H[i],H[p]];i=p;}};
   const pop=()=>{const t=H[0],l=H.pop();if(H.length){H[0]=l;let i=0;for(;;){let a=2*i+1,b=2*i+2,m=i;if(a<H.length&&H[a][0]<H[m][0])m=a;if(b<H.length&&H[b][0]<H[m][0])m=b;if(m===i)break;[H[m],H[i]]=[H[i],H[m]];i=m;}}return t;};
   while(H.length){const [d,u]=pop();if(d>(dist[u]??1e18))continue;if(u===dst)break;
     for(const e of (ADJ[u]||[])){const v=e[0],w=e[wi];const nd=d+w;if(nd<(dist[v]??1e18)){dist[v]=nd;prev[v]=u;push(nd,v);}}}
-  if(prev[dst]===undefined&&src!==dst)return null;
-  const path=[dst];let c=dst;while(c!==src){c=prev[c];if(c===undefined)return null;path.push(c);}
-  return path.reverse();
+  if(src!==dst&&prev[dst]===undefined)return null;
+  const path=[dst];let c=dst;while(c!==src){c=prev[c];if(c===undefined)return null;path.push(c);}return path.reverse();
 }
-function coordsOf(p){return p.map(id=>NODES[id]);}
-function edgeBetween(a,b){for(const e of (ADJ[a]||[]))if(e[0]===b)return e;return null;}
-function stat(path){
-  let len=0; for(let i=0;i<path.length-1;i++){const e=edgeBetween(path[i],path[i+1]); if(e)len+=e[1];}
-  return len;
-}
-function drawRoute(path,color,w){const pl=L.polyline(coordsOf(path),{color,weight:w,opacity:.9}).addTo(map);routeLayers.push(pl);return pl;}
+const edgeBetween=(a,b)=>{for(const e of (ADJ[a]||[]))if(e[0]===b)return e;return null;};
+const coordsOf=p=>p.map(id=>NODES[id]);
+function statLen(path){let L=0;for(let i=0;i<path.length-1;i++){const e=edgeBetween(path[i],path[i+1]);if(e)L+=e[1];}return L;}
 
+function pin(color){return L.divIcon({className:'',iconSize:[20,20],iconAnchor:[10,10],
+  html:`<div style="width:18px;height:18px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>`});}
+function setMode(m){mode=m;
+  document.getElementById('bStart').classList.toggle('arm',m==='start');
+  document.getElementById('bEnd').classList.toggle('arm',m==='end');
+  const h=document.getElementById('hint');
+  if(m==='start')h.innerHTML='地図をタップして<b>出発地</b>を置いてください。';
+  else if(m==='end')h.innerHTML='地図をタップして<b>到着地</b>を置いてください。';
+  else h.innerHTML='ピンを<b>ドラッグ</b>で微調整、または<b>出発地/到着地</b>を押して置き直し。';
+}
+function placePoint(which,latlng){
+  const id=nearest(latlng.lat,latlng.lng); const n=NODES[id];
+  if(which==='start'){ startNode=id;
+    if(startMk)startMk.setLatLng(n); else{startMk=L.marker(n,{icon:pin('#1f8a5b'),draggable:true,zIndexOffset:500}).addTo(map);
+      startMk.on('dragend',e=>{startNode=nearest(e.target.getLatLng().lat,e.target.getLatLng().lng);startMk.setLatLng(NODES[startNode]);route();});}
+  }else{ endNode=id;
+    if(endMk)endMk.setLatLng(n); else{endMk=L.marker(n,{icon:pin('#b3261e'),draggable:true,zIndexOffset:500}).addTo(map);
+      endMk.on('dragend',e=>{endNode=nearest(e.target.getLatLng().lat,e.target.getLatLng().lng);endMk.setLatLng(NODES[endNode]);route();});}
+  }
+}
 function route(){
   routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];
-  const [s,d]=picks;
-  const sp=dijkstra(s,d,1), gp=dijkstra(s,d,2);
-  if(!sp||!gp){banner('この2点は道でつながっていません。別の点で試してください。');return;}
-  drawRoute(sp,'#8a8f8c',5); drawRoute(gp,'#1f8a5b',6);
-  const sl=stat(sp), gl=stat(gp);
+  if(!startNode||!endNode)return;
+  const sp=dijkstra(startNode,endNode,1), gp=dijkstra(startNode,endNode,2);
+  if(!sp||!gp){banner('この2点は道でつながっていません。別の場所で試してください。');return;}
+  banner('',false);
+  routeLayers.push(L.polyline(coordsOf(sp),{color:'#8a8f8c',weight:5,opacity:.85}).addTo(map));
+  routeLayers.push(L.polyline(coordsOf(gp),{color:'#1f8a5b',weight:6,opacity:.95}).addTo(map));
+  const sl=statLen(sp),gl=statLen(gp),pct=sl>0?Math.round((gl-sl)/sl*100):0;
   document.getElementById('sD').textContent=(sl/1000).toFixed(2)+'km';
   document.getElementById('gD').textContent=(gl/1000).toFixed(2)+'km';
-  const pct=sl>0?Math.round((gl-sl)/sl*100):0;
-  document.getElementById('verdict').innerHTML=
-    '快適ルートは最短より <b>+'+Math.max(pct,0)+'%</b> の距離で、車の多い道・バス通りを避けます。';
+  document.getElementById('verdict').innerHTML='快適ルートは最短より <b>+'+Math.max(pct,0)+'%</b> の距離で、車の多い道・バス通りを避けます。';
   document.getElementById('res').classList.add('show');
 }
 map.on('click',e=>{
-  if(NIDS.length===0)return;
-  if(picks.length>=2){picks=[];marks.forEach(m=>map.removeLayer(m));marks=[];routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];document.getElementById('res').classList.remove('show');}
-  const id=nearest(e.latlng.lat,e.latlng.lng);picks.push(id);
-  const n=NODES[id];
-  const mk=L.circleMarker([n[0],n[1]],{radius:8,color:'#fff',weight:2,
-    fillColor:picks.length===1?'#1f8a5b':'#b3261e',fillOpacity:1}).addTo(map);
-  marks.push(mk);
-  document.getElementById('hint').innerHTML=picks.length===1
-    ? '<b>到着地をクリック</b>してください。'
-    : '出発・到着を選びました。<b>クリア</b>で選び直せます。';
-  if(picks.length===2)route();
+  if(NIDS.length===0||!mode)return;               // 何も選んでいない時のタップは無視＝誤操作でルートが消えない
+  placePoint(mode,e.latlng);
+  if(mode==='start'){ if(!endNode){setMode('end');} else {route();setMode(null);} }
+  else { route(); setMode(null); }
 });
-document.getElementById('clear').onclick=()=>{
-  picks=[];marks.forEach(m=>map.removeLayer(m));marks=[];
+document.getElementById('bStart').onclick=()=>setMode(mode==='start'?null:'start');
+document.getElementById('bEnd').onclick=()=>setMode(mode==='end'?null:'end');
+document.getElementById('bClear').onclick=()=>{
+  [startMk,endMk].forEach(m=>{if(m)map.removeLayer(m);}); startMk=endMk=startNode=endNode=null;
   routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];
-  document.getElementById('res').classList.remove('show');
-  document.getElementById('hint').innerHTML='<b>① 出発地をクリック</b> → <b>② 到着地をクリック</b>。';
+  document.getElementById('res').classList.remove('show'); setMode('start');
 };
-document.getElementById('toggleNet').onclick=(ev)=>{
-  netOn=!netOn;ev.target.classList.toggle('on',netOn);
-  if(netOn){
-    netLayer=L.layerGroup();
-    for(const [u,v,pen,bus] of EDGES){
-      const a=NODES[u],b=NODES[v];if(!a||!b)continue;
-      const bad = bus || pen>=4;             // 幹線・バス通り＝避けたい道
-      const col = bad? '#b97f25' : (pen>=3? '#e0a949' : '#bcd8c6');
-      L.polyline([a,b],{color:col,weight:bad?3:2,opacity:bad?.85:.5}).addTo(netLayer);
-    }
-    netLayer.addTo(map);
-  } else if(netLayer){map.removeLayer(netLayer);netLayer=null;}
+document.getElementById('tAvoid').onclick=(ev)=>{
+  if(!avoidLayer)return; const on=ev.target.classList.toggle('on');
+  if(on)avoidLayer.addTo(map); else map.removeLayer(avoidLayer);
 };
 </script>
 </body>
