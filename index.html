@@ -87,7 +87,9 @@ L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
 let NODES={}, ADJ={}, EDGES=[], NIDS=[];
 let netLayer=null, netOn=false;
 let picks=[], marks=[], routeLayers=[];
+const CELL=0.003; let GRID={};   // 格子インデックス（最近傍を高速化）
 
+banner('道路データを読み込み中…');
 fetch('graph.json').then(r=>{if(!r.ok)throw 0;return r.json();}).then(g=>{
   NODES=g.nodes;
   for(const [u,v,len,cc,pen,bus] of g.edges){
@@ -96,14 +98,27 @@ fetch('graph.json').then(r=>{if(!r.ok)throw 0;return r.json();}).then(g=>{
     EDGES.push([u,v,pen,bus]);
   }
   NIDS=Object.keys(NODES);
-  // fit to data
-  let la=[],lo=[]; for(const id of NIDS){la.push(NODES[id][0]);lo.push(NODES[id][1]);}
-  map.fitBounds([[Math.min(...la),Math.min(...lo)],[Math.max(...la),Math.max(...lo)]]);
+  let laMin=90,laMax=-90,loMin=180,loMax=-180;
+  for(const id of NIDS){const n=NODES[id];
+    if(n[0]<laMin)laMin=n[0]; if(n[0]>laMax)laMax=n[0];
+    if(n[1]<loMin)loMin=n[1]; if(n[1]>loMax)loMax=n[1];
+    const k=Math.round(n[0]/CELL)+'_'+Math.round(n[1]/CELL); (GRID[k]=GRID[k]||[]).push(id);
+  }
+  map.fitBounds([[laMin,loMin],[laMax,loMax]]);
+  document.getElementById('banner').style.display='none';
 }).catch(()=>banner('graph.json が読み込めません。index.html と同じ場所に置いてください。'));
 
 function nearest(lat,lon){
-  let best=null,bd=1e18;
-  for(const id of NIDS){const n=NODES[id];const d=(n[0]-lat)**2+(n[1]-lon)**2;if(d<bd){bd=d;best=id;}}
+  const cx=Math.round(lat/CELL), cy=Math.round(lon/CELL);
+  let best=null,bd=1e18,extra=0;
+  for(let r=0;r<=40;r++){
+    for(let i=-r;i<=r;i++)for(let j=-r;j<=r;j++){
+      if(Math.max(Math.abs(i),Math.abs(j))!==r)continue;   // 外周リングだけ走査
+      const b=GRID[(cx+i)+'_'+(cy+j)];
+      if(b)for(const id of b){const n=NODES[id];const d=(n[0]-lat)**2+(n[1]-lon)**2;if(d<bd){bd=d;best=id;}}
+    }
+    if(best){ if(extra>=1) break; extra++; }               // 最初のヒット後もう1周だけ広げて確定
+  }
   return best;
 }
 // simple binary-heap Dijkstra; wkey: 1=length index, 2=comfort index
