@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>みちなり デモ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+  :root{ --go:#1f8a5b; --short:#8a8f8c; --ink:#182320; --muted:#5a6763; --line:#d6ded7;
+         --bg:#ffffff; --panel:rgba(255,255,255,.96); --gsi:#b97f25; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Noto Sans JP",system-ui,sans-serif;color:var(--ink)}
+  #map{position:absolute;inset:0}
+  .brand{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900}
+  .panel{position:absolute;z-index:1000;background:var(--panel);backdrop-filter:blur(6px);
+    border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.12)}
+  #ctl{top:12px;left:12px;width:min(330px,calc(100vw - 24px));padding:16px 16px 14px}
+  #ctl h1{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:24px;margin:0 0 2px}
+  #ctl .sub{font-size:12px;color:var(--muted);margin:0 0 12px}
+  .step{font-size:13px;color:var(--muted);margin:0 0 10px;line-height:1.7}
+  .step b{color:var(--ink)}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 2px}
+  button{font-family:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);
+    background:#fff;color:var(--ink);padding:8px 12px;border-radius:9px;cursor:pointer}
+  button:hover{border-color:var(--go);color:var(--go)}
+  button.on{background:var(--go);color:#fff;border-color:var(--go)}
+  .row{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:9px}
+  .row input{accent-color:var(--go)}
+  #res{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;display:none}
+  #res.show{display:block}
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .cmp .c{border:1px solid var(--line);border-radius:10px;padding:10px}
+  .cmp .lab{font-size:11px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:6px}
+  .sw{width:16px;height:4px;border-radius:2px;display:inline-block}
+  .cmp .big{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:20px;margin-top:4px;
+    font-variant-numeric:tabular-nums}
+  .cmp .k{font-size:11px;color:var(--muted);margin-top:4px}
+  .verdict{font-size:12.5px;color:var(--muted);margin-top:10px}
+  .verdict b{color:var(--go)}
+  #legend{bottom:12px;left:12px;padding:10px 13px;font-size:12px;color:var(--muted)}
+  #legend .li{display:flex;align-items:center;gap:8px;margin:3px 0}
+  #banner{position:absolute;z-index:1001;top:12px;left:50%;transform:translateX(-50%);
+    background:#b3261e;color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;display:none;max-width:92vw}
+  .credit{margin-top:12px;font-size:11px;color:var(--muted)}
+  .credit a{color:var(--go)}
+  @media(max-width:560px){ #ctl{top:8px;left:8px} #legend{display:none} }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="banner"></div>
+
+<div id="ctl" class="panel">
+  <h1><span class="brand">みちなり</span> デモ</h1>
+  <p class="sub">自転車の「快適ルート」を、その場で試す</p>
+  <p class="step" id="hint"><b>① 地図で出発地をクリック</b> → <b>② 到着地をクリック</b>。快適ルート（緑）と最短ルート（灰）を比べます。</p>
+  <div class="btns">
+    <button id="clear">クリア</button>
+    <button id="toggleNet">快適スコアを表示</button>
+  </div>
+  <div id="res">
+    <div class="cmp">
+      <div class="c"><div class="lab"><span class="sw" style="background:var(--short)"></span>最短</div>
+        <div class="big" id="sD">–</div><div class="k" id="sK">距離</div></div>
+      <div class="c"><div class="lab"><span class="sw" style="background:var(--go)"></span>快適</div>
+        <div class="big" id="gD">–</div><div class="k" id="gK">距離</div></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+  </div>
+  <p class="credit">道路網：OpenStreetMap ／ 標高：国土地理院 ／ 地図：地理院地図。研究・プロトタイプ段階のデモ（制作 ash4）。</p>
+</div>
+
+<div id="legend" class="panel">
+  <div class="li"><span class="sw" style="background:var(--go);width:22px;height:5px"></span>快適ルート</div>
+  <div class="li"><span class="sw" style="background:var(--short);width:22px;height:5px"></span>最短ルート</div>
+  <div class="li"><span class="sw" style="background:var(--gsi);width:22px;height:5px"></span>避けたい道（幹線・バス通り）</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const banner=(m)=>{const b=document.getElementById('banner');b.textContent=m;b.style.display='block';};
+const map=L.map('map',{zoomControl:true}).setView([35.749,139.60],14);
+L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+  {attribution:'国土地理院',maxZoom:18}).addTo(map);
+
+let NODES={}, ADJ={}, EDGES=[], NIDS=[];
+let netLayer=null, netOn=false;
+let picks=[], marks=[], routeLayers=[];
+
+fetch('graph.json').then(r=>{if(!r.ok)throw 0;return r.json();}).then(g=>{
+  NODES=g.nodes;
+  for(const [u,v,len,cc,pen,bus] of g.edges){
+    (ADJ[u]=ADJ[u]||[]).push([v,len,cc]);
+    (ADJ[v]=ADJ[v]||[]).push([u,len,cc]);
+    EDGES.push([u,v,pen,bus]);
+  }
+  NIDS=Object.keys(NODES);
+  // fit to data
+  let la=[],lo=[]; for(const id of NIDS){la.push(NODES[id][0]);lo.push(NODES[id][1]);}
+  map.fitBounds([[Math.min(...la),Math.min(...lo)],[Math.max(...la),Math.max(...lo)]]);
+}).catch(()=>banner('graph.json が読み込めません。index.html と同じ場所に置いてください。'));
+
+function nearest(lat,lon){
+  let best=null,bd=1e18;
+  for(const id of NIDS){const n=NODES[id];const d=(n[0]-lat)**2+(n[1]-lon)**2;if(d<bd){bd=d;best=id;}}
+  return best;
+}
+// simple binary-heap Dijkstra; wkey: 1=length index, 2=comfort index
+function dijkstra(src,dst,wi){
+  const dist={},prev={};const H=[[0,src]];dist[src]=0;
+  const push=(d,n)=>{H.push([d,n]);let i=H.length-1;while(i>0){let p=(i-1>>1);if(H[p][0]<=H[i][0])break;[H[p],H[i]]=[H[i],H[p]];i=p;}};
+  const pop=()=>{const t=H[0],l=H.pop();if(H.length){H[0]=l;let i=0;for(;;){let a=2*i+1,b=2*i+2,m=i;if(a<H.length&&H[a][0]<H[m][0])m=a;if(b<H.length&&H[b][0]<H[m][0])m=b;if(m===i)break;[H[m],H[i]]=[H[i],H[m]];i=m;}}return t;};
+  while(H.length){const [d,u]=pop();if(d>(dist[u]??1e18))continue;if(u===dst)break;
+    for(const e of (ADJ[u]||[])){const v=e[0],w=e[wi];const nd=d+w;if(nd<(dist[v]??1e18)){dist[v]=nd;prev[v]=u;push(nd,v);}}}
+  if(prev[dst]===undefined&&src!==dst)return null;
+  const path=[dst];let c=dst;while(c!==src){c=prev[c];if(c===undefined)return null;path.push(c);}
+  return path.reverse();
+}
+function coordsOf(p){return p.map(id=>NODES[id]);}
+function edgeBetween(a,b){for(const e of (ADJ[a]||[]))if(e[0]===b)return e;return null;}
+function stat(path){
+  let len=0; for(let i=0;i<path.length-1;i++){const e=edgeBetween(path[i],path[i+1]); if(e)len+=e[1];}
+  return len;
+}
+function drawRoute(path,color,w){const pl=L.polyline(coordsOf(path),{color,weight:w,opacity:.9}).addTo(map);routeLayers.push(pl);return pl;}
+
+function route(){
+  routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];
+  const [s,d]=picks;
+  const sp=dijkstra(s,d,1), gp=dijkstra(s,d,2);
+  if(!sp||!gp){banner('この2点は道でつながっていません。別の点で試してください。');return;}
+  drawRoute(sp,'#8a8f8c',5); drawRoute(gp,'#1f8a5b',6);
+  const sl=stat(sp), gl=stat(gp);
+  document.getElementById('sD').textContent=(sl/1000).toFixed(2)+'km';
+  document.getElementById('gD').textContent=(gl/1000).toFixed(2)+'km';
+  const pct=sl>0?Math.round((gl-sl)/sl*100):0;
+  document.getElementById('verdict').innerHTML=
+    '快適ルートは最短より <b>+'+Math.max(pct,0)+'%</b> の距離で、車の多い道・バス通りを避けます。';
+  document.getElementById('res').classList.add('show');
+}
+map.on('click',e=>{
+  if(NIDS.length===0)return;
+  if(picks.length>=2){picks=[];marks.forEach(m=>map.removeLayer(m));marks=[];routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];document.getElementById('res').classList.remove('show');}
+  const id=nearest(e.latlng.lat,e.latlng.lng);picks.push(id);
+  const n=NODES[id];
+  const mk=L.circleMarker([n[0],n[1]],{radius:8,color:'#fff',weight:2,
+    fillColor:picks.length===1?'#1f8a5b':'#b3261e',fillOpacity:1}).addTo(map);
+  marks.push(mk);
+  document.getElementById('hint').innerHTML=picks.length===1
+    ? '<b>到着地をクリック</b>してください。'
+    : '出発・到着を選びました。<b>クリア</b>で選び直せます。';
+  if(picks.length===2)route();
+});
+document.getElementById('clear').onclick=()=>{
+  picks=[];marks.forEach(m=>map.removeLayer(m));marks=[];
+  routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];
+  document.getElementById('res').classList.remove('show');
+  document.getElementById('hint').innerHTML='<b>① 出発地をクリック</b> → <b>② 到着地をクリック</b>。';
+};
+document.getElementById('toggleNet').onclick=(ev)=>{
+  netOn=!netOn;ev.target.classList.toggle('on',netOn);
+  if(netOn){
+    netLayer=L.layerGroup();
+    for(const [u,v,pen,bus] of EDGES){
+      const a=NODES[u],b=NODES[v];if(!a||!b)continue;
+      const bad = bus || pen>=4;             // 幹線・バス通り＝避けたい道
+      const col = bad? '#b97f25' : (pen>=3? '#e0a949' : '#bcd8c6');
+      L.polyline([a,b],{color:col,weight:bad?3:2,opacity:bad?.85:.5}).addTo(netLayer);
+    }
+    netLayer.addTo(map);
+  } else if(netLayer){map.removeLayer(netLayer);netLayer=null;}
+};
+</script>
+</body>
+</html>
