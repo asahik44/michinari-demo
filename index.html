@@ -15,8 +15,12 @@
   .brand{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900}
   .panel{position:absolute;z-index:1000;background:var(--panel);backdrop-filter:blur(6px);
     border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.12)}
-  #ctl{top:12px;left:12px;width:min(340px,calc(100vw - 24px));padding:15px 16px 13px}
-  #ctl h1{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:23px;margin:0 0 2px}
+  #ctl{top:12px;left:12px;width:min(340px,calc(100vw - 24px));padding:15px 16px 13px;
+    max-height:calc(100vh - 24px);overflow:auto}
+  #minBtn{position:absolute;top:11px;right:11px;padding:3px 10px;font-size:15px;line-height:1.2;border-radius:9px}
+  #ctl.min{padding-bottom:13px}
+  #ctl.min .sub,#ctl.min #hint,#ctl.min .search,#ctl.min #results,#ctl.min .toggles,#ctl.min #res,#ctl.min .credit{display:none}
+  #ctl h1{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:23px;margin:0 0 2px;padding-right:38px}
   #ctl .sub{font-size:12px;color:var(--muted);margin:0 0 11px}
   #hint{font-size:13px;color:var(--muted);margin:0 0 11px;line-height:1.65;min-height:1.6em}
   #hint b{color:var(--ink)}
@@ -64,6 +68,7 @@
 <div id="banner"></div>
 
 <div id="ctl" class="panel">
+  <button id="minBtn" title="パネルの開閉">－</button>
   <h1><span class="brand">みちなり</span> デモ</h1>
   <p class="sub">自転車の「快適ルート」を、その場で試す（関東全域対応）</p>
   <p id="hint"><b>出発地</b>ボタンを押して地図をタップ → 次に<b>到着地</b>。ピンはドラッグで微調整、クリックで削除できます。</p>
@@ -368,6 +373,13 @@ async function doSearch(){
 }
 document.getElementById('bSearch').onclick=doSearch;
 document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault(); doSearch();} });
+
+// パネル開閉（スマホでは初期は畳んで地図を広く使う）
+const ctl=document.getElementById('ctl');
+const minBtn=document.getElementById('minBtn');
+function setMin(m){ ctl.classList.toggle('min',m); minBtn.textContent=m?'＋':'－'; }
+minBtn.onclick=()=>setMin(!ctl.classList.contains('min'));
+if(window.matchMedia && window.matchMedia('(max-width:560px)').matches) setMin(true);
 
 if(!loadFromHash()) setMode('start');
 </script>
