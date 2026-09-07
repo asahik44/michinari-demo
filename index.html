@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>みちなり デモ</title>
+<title>みちなり デモ（関東全域）</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap">
 <style>
-  :root{ --go:#1f8a5b; --short:#8a8f8c; --avoid:#c47d1a; --ink:#182320; --muted:#5a6763;
+  :root{ --go:#1f8a5b; --short:#8a8f8c; --ink:#182320; --muted:#5a6763;
          --line:#d6ded7; --panel:rgba(255,255,255,.97); }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;font-family:"Noto Sans JP",system-ui,sans-serif;color:var(--ink)}
@@ -28,9 +28,6 @@
   button .pindot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
   #bStart .pindot{background:var(--go)} #bEnd .pindot{background:#b3261e}
   button.arm .pindot{background:#fff}
-  .toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
-  .toggles button{font-size:12px;font-weight:500;padding:7px 10px}
-  .toggles button.on{background:#f0f6f2;border-color:var(--go);color:var(--go);font-weight:700}
   #res{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;display:none}
   #res.show{display:block}
   .cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -38,7 +35,7 @@
   .cmp .lab{font-size:11px;font-weight:700;display:flex;align-items:center;gap:6px}
   .sw{width:16px;height:4px;border-radius:2px;display:inline-block}
   .cmp .big{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:900;font-size:20px;margin-top:4px;font-variant-numeric:tabular-nums}
-  .cmp .k{font-size:11px;color:var(--muted);margin-top:3px}
+  .cmp .k{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5}
   .verdict{font-size:12.5px;color:var(--muted);margin-top:10px}.verdict b{color:var(--go)}
   .credit{margin-top:11px;font-size:11px;color:var(--muted)}
   #legend{bottom:12px;left:12px;padding:10px 13px;font-size:12px;color:var(--muted)}
@@ -54,92 +51,75 @@
 
 <div id="ctl" class="panel">
   <h1><span class="brand">みちなり</span> デモ</h1>
-  <p class="sub">自転車の「快適ルート」を、その場で試す</p>
+  <p class="sub">自転車の「快適ルート」を、その場で試す（関東全域対応）</p>
   <p id="hint"><b>出発地</b>ボタンを押して地図をタップ → 次に<b>到着地</b>。ピンはドラッグで微調整できます。</p>
   <div class="btns">
     <button id="bStart"><span class="pindot"></span>出発地</button>
     <button id="bEnd"><span class="pindot"></span>到着地</button>
     <button id="bClear">クリア</button>
   </div>
-  <div class="toggles">
-    <button id="tAvoid" class="on">避けたい道を表示</button>
-  </div>
   <div id="res">
     <div class="cmp">
-      <div class="c"><div class="lab"><span class="sw" style="background:var(--short)"></span>最短</div>
-        <div class="big" id="sD">–</div><div class="k">距離</div></div>
+      <div class="c"><div class="lab"><span class="sw" style="background:var(--short)"></span>標準</div>
+        <div class="big" id="sD">–</div><div class="k" id="sK">距離</div></div>
       <div class="c"><div class="lab"><span class="sw" style="background:var(--go)"></span>快適</div>
-        <div class="big" id="gD">–</div><div class="k">距離</div></div>
+        <div class="big" id="gD">–</div><div class="k" id="gK">距離</div></div>
     </div>
     <div class="verdict" id="verdict"></div>
   </div>
-  <p class="credit">検索できる範囲＝地図の緑枠内。道路網：OpenStreetMap／標高：国土地理院／地図：地理院地図。研究・プロトタイプ段階のデモ（制作 ash4）。</p>
+  <p class="credit">道路網：OpenStreetMap／標高：国土地理院／地図：地理院地図。快適ロジック（幹線回避・坂回避・未舗装回避）はサーバー側（GraphHopper）で計算。研究・プロトタイプ段階のデモ（制作 ash4）。</p>
 </div>
 
 <div id="legend" class="panel">
-  <div class="li"><span class="sw" style="background:var(--go);width:22px;height:5px"></span>快適ルート</div>
-  <div class="li"><span class="sw" style="background:var(--short);width:22px;height:5px"></span>最短ルート</div>
-  <div class="li"><span class="sw" style="background:var(--avoid);width:22px;height:5px"></span>避けたい道（幹線・バス通り）</div>
+  <div class="li"><span class="sw" style="background:var(--go);width:22px;height:5px"></span>快適ルート（みちなり）</div>
+  <div class="li"><span class="sw" style="background:var(--short);width:22px;height:5px"></span>標準ルート</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
+// ===== サーバー（GraphHopper）設定 =====
+const API='https://168.138.196.21.sslip.io';
+// みちなり快適モデル（幹線回避・坂回避・農道/未舗装抑制）
+const COMFORT_MODEL={
+  distance_influence:30,
+  priority:[
+    {if:"road_class == TRUNK", multiply_by:"0.1"},
+    {if:"road_class == PRIMARY", multiply_by:"0.2"},
+    {if:"road_class == SECONDARY", multiply_by:"0.5"},
+    {if:"road_class == TERTIARY", multiply_by:"0.8"},
+    {if:"road_class == SERVICE || road_class == TRACK", multiply_by:"0.6"},
+    {if:"surface == GRAVEL || surface == DIRT || surface == GROUND || surface == SAND || surface == UNPAVED", multiply_by:"0.4"},
+    {if:"average_slope >= 6", multiply_by:"0.3"},
+    {else_if:"average_slope >= 3", multiply_by:"0.7"}
+  ]
+};
+
 const banner=(m,show=true)=>{const b=document.getElementById('banner');b.textContent=m;b.style.display=show?'block':'none';};
-const map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([35.74,139.62],13);
+const map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([35.83,139.58],11);
 L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{attribution:'国土地理院',maxZoom:18}).addTo(map);
 
-let NODES={}, ADJ={}, EDGES=[], NIDS=[], GRID={}; const CELL=0.003;
-let startNode=null, endNode=null, startMk=null, endMk=null, mode=null;
-let routeLayers=[], avoidLayer=null;
+let startLL=null, endLL=null, startMk=null, endMk=null, mode=null;
+let routeLayers=[];
 
-banner('道路データを読み込み中…');
-fetch('graph.json').then(r=>{if(!r.ok)throw 0;return r.json();}).then(g=>{
-  NODES=g.nodes;
-  for(const [u,v,len,cc,pen,bus] of g.edges){
-    (ADJ[u]=ADJ[u]||[]).push([v,len,cc]); (ADJ[v]=ADJ[v]||[]).push([u,len,cc]);
-    EDGES.push([u,v,pen,bus]);
-  }
-  NIDS=Object.keys(NODES);
-  let laMin=90,laMax=-90,loMin=180,loMax=-180;
-  for(const id of NIDS){const n=NODES[id];
-    if(n[0]<laMin)laMin=n[0]; if(n[0]>laMax)laMax=n[0]; if(n[1]<loMin)loMin=n[1]; if(n[1]>loMax)loMax=n[1];
-    const k=Math.round(n[0]/CELL)+'_'+Math.round(n[1]/CELL); (GRID[k]=GRID[k]||[]).push(id);
-  }
-  // 検索できる範囲：外側を薄暗く＋緑枠
-  const world=[[-85,-185],[85,-185],[85,185],[-85,185]];
-  const hole=[[laMin,loMin],[laMin,loMax],[laMax,loMax],[laMax,loMin]];
-  L.polygon([world,hole],{stroke:false,fillColor:'#1a2b26',fillOpacity:.13,interactive:false}).addTo(map);
-  L.rectangle([[laMin,loMin],[laMax,loMax]],{color:'#1f8a5b',weight:2,dashArray:'7 6',fill:false,interactive:false}).addTo(map);
-  // 避けたい道（幹線・バス通り）レイヤ（デフォルト表示）
-  avoidLayer=L.layerGroup();
-  for(const [u,v,pen,bus] of EDGES){ if(!(bus||pen>=4))continue; const a=NODES[u],b=NODES[v]; if(a&&b)
-    L.polyline([a,b],{color:'#c47d1a',weight:2.5,opacity:.7,interactive:false}).addTo(avoidLayer); }
-  avoidLayer.addTo(map);
-  map.fitBounds([[laMin,loMin],[laMax,loMax]]);
-  banner('',false);
-  setMode('start');
-}).catch(()=>banner('graph.json が読み込めません。index.html と同じ場所に置いてください。'));
-
-function nearest(lat,lon){
-  const cx=Math.round(lat/CELL),cy=Math.round(lon/CELL); let best=null,bd=1e18,extra=0;
-  for(let r=0;r<=40;r++){
-    for(let i=-r;i<=r;i++)for(let j=-r;j<=r;j++){ if(Math.max(Math.abs(i),Math.abs(j))!==r)continue;
-      const b=GRID[(cx+i)+'_'+(cy+j)]; if(b)for(const id of b){const n=NODES[id];const d=(n[0]-lat)**2+(n[1]-lon)**2;if(d<bd){bd=d;best=id;}} }
-    if(best){ if(extra>=1)break; extra++; } }
-  return best;
+// GraphHopper /route を呼ぶ（points=[lon,lat]）
+async function ghRoute(useComfort){
+  const body={
+    points:[[startLL.lng,startLL.lat],[endLL.lng,endLL.lat]],
+    profile:"bike",
+    "ch.disable":true,
+    points_encoded:false,
+    instructions:false,
+    elevation:true
+  };
+  if(useComfort) body.custom_model=COMFORT_MODEL;
+  const r=await fetch(API+'/route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json();
+  if(!r.ok||!j.paths||!j.paths.length){ throw new Error((j&&j.message)||('HTTP '+r.status)); }
+  return j.paths[0];
 }
-function dijkstra(src,dst,wi){
-  const dist={},prev={};const H=[[0,src]];dist[src]=0;
-  const push=(d,n)=>{H.push([d,n]);let i=H.length-1;while(i>0){let p=(i-1>>1);if(H[p][0]<=H[i][0])break;[H[p],H[i]]=[H[i],H[p]];i=p;}};
-  const pop=()=>{const t=H[0],l=H.pop();if(H.length){H[0]=l;let i=0;for(;;){let a=2*i+1,b=2*i+2,m=i;if(a<H.length&&H[a][0]<H[m][0])m=a;if(b<H.length&&H[b][0]<H[m][0])m=b;if(m===i)break;[H[m],H[i]]=[H[i],H[m]];i=m;}}return t;};
-  while(H.length){const [d,u]=pop();if(d>(dist[u]??1e18))continue;if(u===dst)break;
-    for(const e of (ADJ[u]||[])){const v=e[0],w=e[wi];const nd=d+w;if(nd<(dist[v]??1e18)){dist[v]=nd;prev[v]=u;push(nd,v);}}}
-  if(src!==dst&&prev[dst]===undefined)return null;
-  const path=[dst];let c=dst;while(c!==src){c=prev[c];if(c===undefined)return null;path.push(c);}return path.reverse();
-}
-const edgeBetween=(a,b)=>{for(const e of (ADJ[a]||[]))if(e[0]===b)return e;return null;};
-const coordsOf=p=>p.map(id=>NODES[id]);
-function statLen(path){let L=0;for(let i=0;i<path.length-1;i++){const e=edgeBetween(path[i],path[i+1]);if(e)L+=e[1];}return L;}
+const toLatLng=path=>path.points.coordinates.map(c=>[c[1],c[0]]);
+const fmtKm=m=>(m/1000).toFixed(2)+'km';
+const fmtMin=ms=>Math.round(ms/60000)+'分';
 
 function pin(color){return L.divIcon({className:'',iconSize:[20,20],iconAnchor:[10,10],
   html:`<div style="width:18px;height:18px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>`});}
@@ -152,46 +132,51 @@ function setMode(m){mode=m;
   else h.innerHTML='ピンを<b>ドラッグ</b>で微調整、または<b>出発地/到着地</b>を押して置き直し。';
 }
 function placePoint(which,latlng){
-  const id=nearest(latlng.lat,latlng.lng); const n=NODES[id];
-  if(which==='start'){ startNode=id;
-    if(startMk)startMk.setLatLng(n); else{startMk=L.marker(n,{icon:pin('#1f8a5b'),draggable:true,zIndexOffset:500}).addTo(map);
-      startMk.on('dragend',e=>{startNode=nearest(e.target.getLatLng().lat,e.target.getLatLng().lng);startMk.setLatLng(NODES[startNode]);route();});}
-  }else{ endNode=id;
-    if(endMk)endMk.setLatLng(n); else{endMk=L.marker(n,{icon:pin('#b3261e'),draggable:true,zIndexOffset:500}).addTo(map);
-      endMk.on('dragend',e=>{endNode=nearest(e.target.getLatLng().lat,e.target.getLatLng().lng);endMk.setLatLng(NODES[endNode]);route();});}
+  if(which==='start'){ startLL=latlng;
+    if(startMk)startMk.setLatLng(latlng); else{startMk=L.marker(latlng,{icon:pin('#1f8a5b'),draggable:true,zIndexOffset:500}).addTo(map);
+      startMk.on('dragend',e=>{startLL=e.target.getLatLng();route();});}
+  }else{ endLL=latlng;
+    if(endMk)endMk.setLatLng(latlng); else{endMk=L.marker(latlng,{icon:pin('#b3261e'),draggable:true,zIndexOffset:500}).addTo(map);
+      endMk.on('dragend',e=>{endLL=e.target.getLatLng();route();});}
   }
 }
-function route(){
+async function route(){
   routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];
-  if(!startNode||!endNode)return;
-  const sp=dijkstra(startNode,endNode,1), gp=dijkstra(startNode,endNode,2);
-  if(!sp||!gp){banner('この2点は道でつながっていません。別の場所で試してください。');return;}
-  banner('',false);
-  routeLayers.push(L.polyline(coordsOf(sp),{color:'#8a8f8c',weight:5,opacity:.85}).addTo(map));
-  routeLayers.push(L.polyline(coordsOf(gp),{color:'#1f8a5b',weight:6,opacity:.95}).addTo(map));
-  const sl=statLen(sp),gl=statLen(gp),pct=sl>0?Math.round((gl-sl)/sl*100):0;
-  document.getElementById('sD').textContent=(sl/1000).toFixed(2)+'km';
-  document.getElementById('gD').textContent=(gl/1000).toFixed(2)+'km';
-  document.getElementById('verdict').innerHTML='快適ルートは最短より <b>+'+Math.max(pct,0)+'%</b> の距離で、車の多い道・バス通りを避けます。';
-  document.getElementById('res').classList.add('show');
+  if(!startLL||!endLL)return;
+  banner('ルート計算中…');
+  try{
+    const [sp,gp]=await Promise.all([ghRoute(false),ghRoute(true)]);
+    banner('',false);
+    routeLayers.push(L.polyline(toLatLng(sp),{color:'#8a8f8c',weight:5,opacity:.85}).addTo(map));
+    routeLayers.push(L.polyline(toLatLng(gp),{color:'#1f8a5b',weight:6,opacity:.95}).addTo(map));
+    const sl=sp.distance, gl=gp.distance, pct=sl>0?Math.round((gl-sl)/sl*100):0;
+    document.getElementById('sD').textContent=fmtKm(sl);
+    document.getElementById('gD').textContent=fmtKm(gl);
+    document.getElementById('sK').innerHTML='距離 ・ 約'+fmtMin(sp.time)+'<br>獲得標高 '+Math.round(sp.ascend||0)+'m';
+    document.getElementById('gK').innerHTML='距離 ・ 約'+fmtMin(gp.time)+'<br>獲得標高 '+Math.round(gp.ascend||0)+'m';
+    const climbCut=(sp.ascend||0)-(gp.ascend||0);
+    let msg='快適ルートは標準より <b>'+(pct>=0?'+':'')+pct+'%</b> の距離で、幹線・急坂・未舗装を避けます。';
+    if(climbCut>=5) msg+=' 登りは約 <b>'+Math.round(climbCut)+'m</b> 少なめ。';
+    document.getElementById('verdict').innerHTML=msg;
+    document.getElementById('res').classList.add('show');
+  }catch(err){
+    banner('ルート計算に失敗：'+err.message);
+  }
 }
 map.on('click',e=>{
-  if(NIDS.length===0||!mode)return;               // 何も選んでいない時のタップは無視＝誤操作でルートが消えない
+  if(!mode)return;                 // 何も選んでいない時のタップは無視＝誤操作でルートが消えない
   placePoint(mode,e.latlng);
-  if(mode==='start'){ if(!endNode){setMode('end');} else {route();setMode(null);} }
+  if(mode==='start'){ if(!endLL){setMode('end');} else {route();setMode(null);} }
   else { route(); setMode(null); }
 });
 document.getElementById('bStart').onclick=()=>setMode(mode==='start'?null:'start');
 document.getElementById('bEnd').onclick=()=>setMode(mode==='end'?null:'end');
 document.getElementById('bClear').onclick=()=>{
-  [startMk,endMk].forEach(m=>{if(m)map.removeLayer(m);}); startMk=endMk=startNode=endNode=null;
+  [startMk,endMk].forEach(m=>{if(m)map.removeLayer(m);}); startMk=endMk=startLL=endLL=null;
   routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];
   document.getElementById('res').classList.remove('show'); setMode('start');
 };
-document.getElementById('tAvoid').onclick=(ev)=>{
-  if(!avoidLayer)return; const on=ev.target.classList.toggle('on');
-  if(on)avoidLayer.addTo(map); else map.removeLayer(avoidLayer);
-};
+setMode('start');
 </script>
 </body>
 </html>
