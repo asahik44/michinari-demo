@@ -43,6 +43,13 @@
   .cmp .k{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5}
   .verdict{font-size:12.5px;color:var(--muted);margin-top:10px}.verdict b{color:var(--go)}
   .credit{margin-top:11px;font-size:11px;color:var(--muted)}
+  .search{display:flex;gap:6px;margin-bottom:10px}
+  .search input{flex:1;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;min-width:0}
+  #results{margin:-2px 0 8px}
+  .rrow{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px}
+  .rname{flex:1;color:var(--ink);line-height:1.4;overflow:hidden;text-overflow:ellipsis}
+  .rrow button{padding:5px 10px;font-size:12px;font-weight:700}
+  .rnote{font-size:12px;color:var(--muted);padding:6px 0}
   #legend{bottom:12px;left:12px;padding:10px 13px;font-size:12px;color:var(--muted)}
   #legend .li{display:flex;align-items:center;gap:8px;margin:3px 0}
   #banner{position:absolute;z-index:1001;top:12px;left:50%;transform:translateX(-50%);
@@ -60,9 +67,15 @@
   <h1><span class="brand">みちなり</span> デモ</h1>
   <p class="sub">自転車の「快適ルート」を、その場で試す（関東全域対応）</p>
   <p id="hint"><b>出発地</b>ボタンを押して地図をタップ → 次に<b>到着地</b>。ピンはドラッグで微調整、クリックで削除できます。</p>
+  <div class="search">
+    <input id="q" type="text" placeholder="駅名・地名・住所で検索" autocomplete="off">
+    <button id="bSearch">検索</button>
+  </div>
+  <div id="results"></div>
   <div class="btns">
     <button id="bStart"><span class="pindot"></span>出発地</button>
     <button id="bEnd"><span class="pindot"></span>到着地</button>
+    <button id="bVia">経由地</button>
     <button id="bGeo">現在地</button>
     <button id="bClear">クリア</button>
     <button id="bShare">共有</button>
@@ -127,14 +140,18 @@ const map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([35.83,139.5
 L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{attribution:'国土地理院',maxZoom:18}).addTo(map);
 
 let startLL=null, endLL=null, startMk=null, endMk=null, mode=null;
+let vias=[], viaMks=[];   // 経由地（順番に通過）
 let routeLayers=[];
 let avoidLayer=L.layerGroup().addTo(map);
 let avoidOn=true;
 
 // GraphHopper /route を呼ぶ（points=[lon,lat]）
 async function ghRoute(useComfort){
+  const pts=[[startLL.lng,startLL.lat]];
+  for(const v of vias) pts.push([v.lng,v.lat]);
+  pts.push([endLL.lng,endLL.lat]);
   const body={
-    points:[[startLL.lng,startLL.lat],[endLL.lng,endLL.lat]],
+    points:pts,
     profile:"bike",
     "ch.disable":true,
     points_encoded:false,
@@ -166,22 +183,44 @@ function buildHighlights(path){
 
 function pin(color){return L.divIcon({className:'',iconSize:[20,20],iconAnchor:[10,10],
   html:`<div style="width:18px;height:18px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>`});}
+function viaPin(n){return L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],
+  html:`<div style="width:20px;height:20px;border-radius:50%;background:#e0781a;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);color:#fff;font:700 11px/20px sans-serif;text-align:center">${n}</div>`});}
 function setMode(m){mode=m;
   document.getElementById('bStart').classList.toggle('arm',m==='start');
   document.getElementById('bEnd').classList.toggle('arm',m==='end');
+  document.getElementById('bVia').classList.toggle('arm',m==='via');
   const h=document.getElementById('hint');
   if(m==='start')h.innerHTML='地図をタップして<b>出発地</b>を置いてください。';
   else if(m==='end')h.innerHTML='地図をタップして<b>到着地</b>を置いてください。';
-  else h.innerHTML='ピンを<b>ドラッグ</b>で微調整／<b>クリックで削除</b>して置き直し。';
+  else if(m==='via')h.innerHTML='地図をタップして<b>経由地</b>を追加（続けて何点でもOK）。';
+  else h.innerHTML='ピンを<b>ドラッグ</b>で微調整／<b>クリックで削除</b>。';
 }
 function bindPin(mk,which){
   mk.bindPopup('<div class="delp">'+(which==='start'?'出発地':'到着地')+'<br><a href="#" data-del="'+which+'">× この地点を削除</a></div>');
 }
+function bindViaPin(mk){
+  mk.bindPopup('<div class="delp">経由地<br><a href="#" data-delvia="1">× この経由地を削除</a></div>');
+}
 map.on('popupopen',ev=>{
   const el=ev.popup.getElement(); if(!el)return;
-  const a=el.querySelector('[data-del]'); if(!a)return;
-  a.onclick=(e)=>{e.preventDefault(); removePoint(a.getAttribute('data-del')); map.closePopup();};
+  const a=el.querySelector('[data-del]');
+  if(a){ a.onclick=(e)=>{e.preventDefault(); removePoint(a.getAttribute('data-del')); map.closePopup();}; return; }
+  const av=el.querySelector('[data-delvia]');
+  if(av){ const src=ev.popup._source; av.onclick=(e)=>{e.preventDefault(); removeVia(src); map.closePopup();}; }
 });
+function renumberVias(){ viaMks.forEach((m,i)=>m.setIcon(viaPin(i+1))); }
+function addVia(latlng){
+  vias.push(latlng);
+  const mk=L.marker(latlng,{icon:viaPin(vias.length),draggable:true,zIndexOffset:400}).addTo(map);
+  bindViaPin(mk);
+  mk.on('dragend',e=>{ const i=viaMks.indexOf(mk); if(i>=0)vias[i]=e.target.getLatLng(); route(); });
+  viaMks.push(mk);
+}
+function removeVia(mk){
+  const i=viaMks.indexOf(mk); if(i<0)return;
+  map.removeLayer(mk); viaMks.splice(i,1); vias.splice(i,1);
+  renumberVias(); route();
+}
 function removePoint(which){
   if(which==='start'){ if(startMk){map.removeLayer(startMk);startMk=null;} startLL=null; }
   else { if(endMk){map.removeLayer(endMk);endMk=null;} endLL=null; }
@@ -226,6 +265,7 @@ async function route(){
 }
 map.on('click',e=>{
   if(!mode)return;               // 何も選んでいない時のタップは無視＝誤操作でルートが消えない
+  if(mode==='via'){ addVia(e.latlng); if(startLL&&endLL)route(); return; } // 経由地モードは連続追加
   placePoint(mode,e.latlng);
   const other = (mode==='start')?endLL:startLL;
   if(!other){ setMode(mode==='start'?'end':'start'); }
@@ -233,8 +273,13 @@ map.on('click',e=>{
 });
 document.getElementById('bStart').onclick=()=>setMode(mode==='start'?null:'start');
 document.getElementById('bEnd').onclick=()=>setMode(mode==='end'?null:'end');
+document.getElementById('bVia').onclick=()=>{
+  if(!startLL||!endLL){banner('先に出発地と到着地を置いてください');setTimeout(()=>banner('',false),2000);return;}
+  setMode(mode==='via'?null:'via');
+};
 document.getElementById('bClear').onclick=()=>{
   [startMk,endMk].forEach(m=>{if(m)map.removeLayer(m);}); startMk=endMk=startLL=endLL=null;
+  viaMks.forEach(m=>map.removeLayer(m)); viaMks=[]; vias=[];
   routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[]; avoidLayer.clearLayers();
   document.getElementById('res').classList.remove('show'); setMode('start');
 };
@@ -261,6 +306,7 @@ function currentShareURL(){
   const p=[];
   if(startLL)p.push('s='+startLL.lat.toFixed(5)+','+startLL.lng.toFixed(5));
   if(endLL)p.push('e='+endLL.lat.toFixed(5)+','+endLL.lng.toFixed(5));
+  if(vias.length)p.push('v='+vias.map(v=>v.lat.toFixed(5)+','+v.lng.toFixed(5)).join(';'));
   p.push('d='+DINF);
   return location.origin+location.pathname+'#'+p.join('&');
 }
@@ -279,6 +325,7 @@ function loadFromHash(){
   if(q.d){ const d=parseInt(q.d,10); if(d){DINF=d; selectStrength(d);} }
   if(q.s){ const [a,b]=q.s.split(',').map(Number); if(isFinite(a)&&isFinite(b))placePoint('start',L.latLng(a,b)); }
   if(q.e){ const [a,b]=q.e.split(',').map(Number); if(isFinite(a)&&isFinite(b))placePoint('end',L.latLng(a,b)); }
+  if(q.v){ q.v.split(';').forEach(s=>{const [a,b]=s.split(',').map(Number); if(isFinite(a)&&isFinite(b))addVia(L.latLng(a,b));}); }
   if(startLL&&endLL){ route(); setMode(null);
     map.fitBounds([[startLL.lat,startLL.lng],[endLL.lat,endLL.lng]],{padding:[70,70]}); return true; }
   return false;
@@ -287,6 +334,41 @@ document.getElementById('tAvoid').onclick=(ev)=>{
   avoidOn=ev.target.classList.toggle('on');
   if(avoidOn)avoidLayer.addTo(map); else map.removeLayer(avoidLayer);
 };
+// ===== 地名・駅名・住所 検索（Nominatim / OpenStreetMap） =====
+async function geocode(q){
+  const url='https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=jp&accept-language=ja&q='+encodeURIComponent(q);
+  const r=await fetch(url,{headers:{'Accept':'application/json'}});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+function setFromSearch(which,lat,lon){
+  const ll=L.latLng(lat,lon);
+  placePoint(which,ll); map.setView(ll,14);
+  if(startLL&&endLL)route();
+  document.getElementById('results').innerHTML='';
+}
+function showResults(list){
+  const box=document.getElementById('results'); box.innerHTML='';
+  if(!list||!list.length){ box.innerHTML='<div class="rnote">見つかりませんでした</div>'; return; }
+  list.forEach(it=>{
+    const lat=parseFloat(it.lat), lon=parseFloat(it.lon);
+    const row=document.createElement('div'); row.className='rrow';
+    const nm=document.createElement('span'); nm.className='rname'; nm.textContent=it.display_name;
+    const bS=document.createElement('button'); bS.textContent='発'; bS.onclick=()=>setFromSearch('start',lat,lon);
+    const bE=document.createElement('button'); bE.textContent='着'; bE.onclick=()=>setFromSearch('end',lat,lon);
+    row.appendChild(nm); row.appendChild(bS); row.appendChild(bE);
+    box.appendChild(row);
+  });
+}
+async function doSearch(){
+  const q=document.getElementById('q').value.trim(); if(!q)return;
+  banner('検索中…');
+  try{ const list=await geocode(q); banner('',false); showResults(list); }
+  catch(err){ banner('検索に失敗：'+err.message); }
+}
+document.getElementById('bSearch').onclick=doSearch;
+document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault(); doSearch();} });
+
 if(!loadFromHash()) setMode('start');
 </script>
 </body>
