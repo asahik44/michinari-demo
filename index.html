@@ -63,13 +63,16 @@
   <div class="btns">
     <button id="bStart"><span class="pindot"></span>出発地</button>
     <button id="bEnd"><span class="pindot"></span>到着地</button>
+    <button id="bGeo">現在地</button>
     <button id="bClear">クリア</button>
+    <button id="bShare">共有</button>
   </div>
   <div class="toggles" id="strength">
     <span class="lab2">快適さ</span>
     <button data-d="110">弱</button>
     <button data-d="70" class="son">中</button>
     <button data-d="40">強</button>
+    <button data-d="12">川沿い</button>
   </div>
   <div class="toggles">
     <button id="tAvoid" class="on">混雑・坂を強調</button>
@@ -110,7 +113,9 @@ function comfortModel(){return {
     {if:"road_class == SERVICE || road_class == TRACK", multiply_by:"0.7"},
     {if:"surface == GRAVEL || surface == DIRT || surface == GROUND || surface == SAND || surface == UNPAVED", multiply_by:"0.4"},
     {if:"average_slope >= 6", multiply_by:"0.35"},
-    {else_if:"average_slope >= 3", multiply_by:"0.75"}
+    {else_if:"average_slope >= 3", multiply_by:"0.75"},
+    {if:"bike_network != MISSING", multiply_by:"1.6"},
+    {if:"road_class == CYCLEWAY", multiply_by:"1.3"}
   ]
 };}
 const TRUNK_CLASSES=new Set(["TRUNK","PRIMARY","SECONDARY"]); // 強調する幹線
@@ -239,11 +244,49 @@ document.querySelectorAll('#strength button').forEach(b=>{
     if(startLL&&endLL)route();
   };
 });
+// 現在地を出発地に
+document.getElementById('bGeo').onclick=()=>{
+  if(!navigator.geolocation){banner('この端末では現在地を取得できません');return;}
+  banner('現在地を取得中…');
+  navigator.geolocation.getCurrentPosition(p=>{
+    banner('',false);
+    const ll=L.latLng(p.coords.latitude,p.coords.longitude);
+    placePoint('start',ll); map.setView(ll,15);
+    if(endLL){route();setMode(null);} else setMode('end');
+  },err=>banner('現在地の取得に失敗：'+err.message),{enableHighAccuracy:true,timeout:8000});
+};
+// ルート共有（URLをコピー）
+function currentShareURL(){
+  const p=[];
+  if(startLL)p.push('s='+startLL.lat.toFixed(5)+','+startLL.lng.toFixed(5));
+  if(endLL)p.push('e='+endLL.lat.toFixed(5)+','+endLL.lng.toFixed(5));
+  p.push('d='+DINF);
+  return location.origin+location.pathname+'#'+p.join('&');
+}
+document.getElementById('bShare').onclick=async()=>{
+  if(!startLL||!endLL){banner('先に出発地と到着地を置いてください');return;}
+  const u=currentShareURL();
+  try{ await navigator.clipboard.writeText(u); banner('共有リンクをコピーしました'); setTimeout(()=>banner('',false),2000);}
+  catch(e){ prompt('このリンクをコピーしてください', u); }
+};
+function selectStrength(d){
+  document.querySelectorAll('#strength button').forEach(x=>x.classList.toggle('son',parseInt(x.dataset.d,10)===d));
+}
+function loadFromHash(){
+  const h=location.hash.replace(/^#/,''); if(!h)return false;
+  const q={}; h.split('&').forEach(kv=>{const i=kv.indexOf('='); if(i>0)q[kv.slice(0,i)]=kv.slice(i+1);});
+  if(q.d){ const d=parseInt(q.d,10); if(d){DINF=d; selectStrength(d);} }
+  if(q.s){ const [a,b]=q.s.split(',').map(Number); if(isFinite(a)&&isFinite(b))placePoint('start',L.latLng(a,b)); }
+  if(q.e){ const [a,b]=q.e.split(',').map(Number); if(isFinite(a)&&isFinite(b))placePoint('end',L.latLng(a,b)); }
+  if(startLL&&endLL){ route(); setMode(null);
+    map.fitBounds([[startLL.lat,startLL.lng],[endLL.lat,endLL.lng]],{padding:[70,70]}); return true; }
+  return false;
+}
 document.getElementById('tAvoid').onclick=(ev)=>{
   avoidOn=ev.target.classList.toggle('on');
   if(avoidOn)avoidLayer.addTo(map); else map.removeLayer(avoidLayer);
 };
-setMode('start');
+if(!loadFromHash()) setMode('start');
 </script>
 </body>
 </html>
