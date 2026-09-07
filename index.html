@@ -31,6 +31,8 @@
   .toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
   .toggles button{font-size:12px;font-weight:500;padding:7px 10px}
   .toggles button.on{background:#fff6ec;border-color:var(--avoid);color:#a85610;font-weight:700}
+  .toggles .lab2{align-self:center;font-size:12px;color:var(--muted)}
+  .toggles button.son{background:#f0f6f2;border-color:var(--go);color:var(--go);font-weight:700}
   #res{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;display:none}
   #res.show{display:block}
   .cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -63,6 +65,12 @@
     <button id="bEnd"><span class="pindot"></span>到着地</button>
     <button id="bClear">クリア</button>
   </div>
+  <div class="toggles" id="strength">
+    <span class="lab2">快適さ</span>
+    <button data-d="110">弱</button>
+    <button data-d="70" class="son">中</button>
+    <button data-d="40">強</button>
+  </div>
   <div class="toggles">
     <button id="tAvoid" class="on">混雑・坂を強調</button>
   </div>
@@ -90,20 +98,21 @@
 // ===== サーバー（GraphHopper）設定 =====
 const API='https://168.138.196.21.sslip.io';
 // みちなり快適モデル（幹線回避・坂回避・農道/未舗装抑制）
-// distance_influence を上げると「わずかな快適さのための無駄な遠回り」が減る
-const COMFORT_MODEL={
-  distance_influence:55,
+// distance_influence が大きいほど「わずかな快適さのための無駄な遠回り」が減る
+let DINF=70; // 快適さの強さ（画面の弱/中/強で切替）。弱=110 中=70 強=40
+function comfortModel(){return {
+  distance_influence:DINF,
   priority:[
     {if:"road_class == TRUNK", multiply_by:"0.1"},
-    {if:"road_class == PRIMARY", multiply_by:"0.25"},
-    {if:"road_class == SECONDARY", multiply_by:"0.6"},
-    {if:"road_class == TERTIARY", multiply_by:"0.9"},
+    {if:"road_class == PRIMARY", multiply_by:"0.3"},
+    {if:"road_class == SECONDARY", multiply_by:"0.75"},
+    {if:"road_class == TERTIARY", multiply_by:"0.95"},
     {if:"road_class == SERVICE || road_class == TRACK", multiply_by:"0.7"},
     {if:"surface == GRAVEL || surface == DIRT || surface == GROUND || surface == SAND || surface == UNPAVED", multiply_by:"0.4"},
     {if:"average_slope >= 6", multiply_by:"0.35"},
     {else_if:"average_slope >= 3", multiply_by:"0.75"}
   ]
-};
+};}
 const TRUNK_CLASSES=new Set(["TRUNK","PRIMARY","SECONDARY"]); // 強調する幹線
 const STEEP_ABS=5; // 強調する急坂（|勾配|%）
 
@@ -127,7 +136,7 @@ async function ghRoute(useComfort){
     elevation:true,
     details:["road_class","average_slope"]
   };
-  if(useComfort) body.custom_model=COMFORT_MODEL;
+  if(useComfort) body.custom_model=comfortModel();
   const r=await fetch(API+'/route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j=await r.json();
   if(!r.ok||!j.paths||!j.paths.length){ throw new Error((j&&j.message)||('HTTP '+r.status)); }
@@ -223,6 +232,13 @@ document.getElementById('bClear').onclick=()=>{
   routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[]; avoidLayer.clearLayers();
   document.getElementById('res').classList.remove('show'); setMode('start');
 };
+document.querySelectorAll('#strength button').forEach(b=>{
+  b.onclick=()=>{ DINF=parseInt(b.dataset.d,10);
+    document.querySelectorAll('#strength button').forEach(x=>x.classList.remove('son'));
+    b.classList.add('son');
+    if(startLL&&endLL)route();
+  };
+});
 document.getElementById('tAvoid').onclick=(ev)=>{
   avoidOn=ev.target.classList.toggle('on');
   if(avoidOn)avoidLayer.addTo(map); else map.removeLayer(avoidLayer);
