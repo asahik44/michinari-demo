@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap">
 <style>
-  :root{ --go:#1f8a5b; --short:#8a8f8c; --ink:#182320; --muted:#5a6763;
+  :root{ --go:#1f8a5b; --short:#3b5bdb; --avoid:#e0781a; --steep:#d0342c; --ink:#182320; --muted:#5a6763;
          --line:#d6ded7; --panel:rgba(255,255,255,.97); }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;font-family:"Noto Sans JP",system-ui,sans-serif;color:var(--ink)}
@@ -28,6 +28,9 @@
   button .pindot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
   #bStart .pindot{background:var(--go)} #bEnd .pindot{background:#b3261e}
   button.arm .pindot{background:#fff}
+  .toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+  .toggles button{font-size:12px;font-weight:500;padding:7px 10px}
+  .toggles button.on{background:#fff6ec;border-color:var(--avoid);color:#a85610;font-weight:700}
   #res{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;display:none}
   #res.show{display:block}
   .cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -42,6 +45,8 @@
   #legend .li{display:flex;align-items:center;gap:8px;margin:3px 0}
   #banner{position:absolute;z-index:1001;top:12px;left:50%;transform:translateX(-50%);
     background:#333;color:#fff;padding:8px 14px;border-radius:10px;font-size:13px;display:none;max-width:92vw}
+  .delp{font:13px/1.6 "Noto Sans JP",sans-serif}
+  .delp a{color:#b3261e;font-weight:700;text-decoration:none}
   @media(max-width:560px){ #legend{display:none} }
 </style>
 </head>
@@ -52,11 +57,14 @@
 <div id="ctl" class="panel">
   <h1><span class="brand">みちなり</span> デモ</h1>
   <p class="sub">自転車の「快適ルート」を、その場で試す（関東全域対応）</p>
-  <p id="hint"><b>出発地</b>ボタンを押して地図をタップ → 次に<b>到着地</b>。ピンはドラッグで微調整できます。</p>
+  <p id="hint"><b>出発地</b>ボタンを押して地図をタップ → 次に<b>到着地</b>。ピンはドラッグで微調整、クリックで削除できます。</p>
   <div class="btns">
     <button id="bStart"><span class="pindot"></span>出発地</button>
     <button id="bEnd"><span class="pindot"></span>到着地</button>
     <button id="bClear">クリア</button>
+  </div>
+  <div class="toggles">
+    <button id="tAvoid" class="on">混雑・坂を強調</button>
   </div>
   <div id="res">
     <div class="cmp">
@@ -73,6 +81,8 @@
 <div id="legend" class="panel">
   <div class="li"><span class="sw" style="background:var(--go);width:22px;height:5px"></span>快適ルート（みちなり）</div>
   <div class="li"><span class="sw" style="background:var(--short);width:22px;height:5px"></span>標準ルート</div>
+  <div class="li"><span class="sw" style="background:var(--avoid);width:22px;height:5px"></span>幹線（交通量多め）</div>
+  <div class="li"><span class="sw" style="background:var(--steep);width:22px;height:5px"></span>急坂</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -80,19 +90,22 @@
 // ===== サーバー（GraphHopper）設定 =====
 const API='https://168.138.196.21.sslip.io';
 // みちなり快適モデル（幹線回避・坂回避・農道/未舗装抑制）
+// distance_influence を上げると「わずかな快適さのための無駄な遠回り」が減る
 const COMFORT_MODEL={
-  distance_influence:30,
+  distance_influence:55,
   priority:[
     {if:"road_class == TRUNK", multiply_by:"0.1"},
-    {if:"road_class == PRIMARY", multiply_by:"0.2"},
-    {if:"road_class == SECONDARY", multiply_by:"0.5"},
-    {if:"road_class == TERTIARY", multiply_by:"0.8"},
-    {if:"road_class == SERVICE || road_class == TRACK", multiply_by:"0.6"},
+    {if:"road_class == PRIMARY", multiply_by:"0.25"},
+    {if:"road_class == SECONDARY", multiply_by:"0.6"},
+    {if:"road_class == TERTIARY", multiply_by:"0.9"},
+    {if:"road_class == SERVICE || road_class == TRACK", multiply_by:"0.7"},
     {if:"surface == GRAVEL || surface == DIRT || surface == GROUND || surface == SAND || surface == UNPAVED", multiply_by:"0.4"},
-    {if:"average_slope >= 6", multiply_by:"0.3"},
-    {else_if:"average_slope >= 3", multiply_by:"0.7"}
+    {if:"average_slope >= 6", multiply_by:"0.35"},
+    {else_if:"average_slope >= 3", multiply_by:"0.75"}
   ]
 };
+const TRUNK_CLASSES=new Set(["TRUNK","PRIMARY","SECONDARY"]); // 強調する幹線
+const STEEP_ABS=5; // 強調する急坂（|勾配|%）
 
 const banner=(m,show=true)=>{const b=document.getElementById('banner');b.textContent=m;b.style.display=show?'block':'none';};
 const map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([35.83,139.58],11);
@@ -100,6 +113,8 @@ L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{attribu
 
 let startLL=null, endLL=null, startMk=null, endMk=null, mode=null;
 let routeLayers=[];
+let avoidLayer=L.layerGroup().addTo(map);
+let avoidOn=true;
 
 // GraphHopper /route を呼ぶ（points=[lon,lat]）
 async function ghRoute(useComfort){
@@ -109,7 +124,8 @@ async function ghRoute(useComfort){
     "ch.disable":true,
     points_encoded:false,
     instructions:false,
-    elevation:true
+    elevation:true,
+    details:["road_class","average_slope"]
   };
   if(useComfort) body.custom_model=COMFORT_MODEL;
   const r=await fetch(API+'/route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -121,6 +137,18 @@ const toLatLng=path=>path.points.coordinates.map(c=>[c[1],c[0]]);
 const fmtKm=m=>(m/1000).toFixed(2)+'km';
 const fmtMin=ms=>Math.round(ms/60000)+'分';
 
+// ルート沿いの幹線・急坂区間を強調レイヤーに描く
+function buildHighlights(path){
+  const co=path.points.coordinates;
+  const seg=(from,to)=>co.slice(from,to+1).map(c=>[c[1],c[0]]);
+  const rc=(path.details&&path.details.road_class)||[];
+  for(const [f,t,v] of rc){ if(TRUNK_CLASSES.has(v))
+    L.polyline(seg(f,t),{color:'#e0781a',weight:9,opacity:.5,interactive:false}).addTo(avoidLayer); }
+  const sl=(path.details&&path.details.average_slope)||[];
+  for(const [f,t,v] of sl){ if(v!=null&&Math.abs(v)>=STEEP_ABS)
+    L.polyline(seg(f,t),{color:'#d0342c',weight:9,opacity:.5,interactive:false}).addTo(avoidLayer); }
+}
+
 function pin(color){return L.divIcon({className:'',iconSize:[20,20],iconAnchor:[10,10],
   html:`<div style="width:18px;height:18px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>`});}
 function setMode(m){mode=m;
@@ -129,26 +157,44 @@ function setMode(m){mode=m;
   const h=document.getElementById('hint');
   if(m==='start')h.innerHTML='地図をタップして<b>出発地</b>を置いてください。';
   else if(m==='end')h.innerHTML='地図をタップして<b>到着地</b>を置いてください。';
-  else h.innerHTML='ピンを<b>ドラッグ</b>で微調整、または<b>出発地/到着地</b>を押して置き直し。';
+  else h.innerHTML='ピンを<b>ドラッグ</b>で微調整／<b>クリックで削除</b>して置き直し。';
+}
+function bindPin(mk,which){
+  mk.bindPopup('<div class="delp">'+(which==='start'?'出発地':'到着地')+'<br><a href="#" data-del="'+which+'">× この地点を削除</a></div>');
+}
+map.on('popupopen',ev=>{
+  const el=ev.popup.getElement(); if(!el)return;
+  const a=el.querySelector('[data-del]'); if(!a)return;
+  a.onclick=(e)=>{e.preventDefault(); removePoint(a.getAttribute('data-del')); map.closePopup();};
+});
+function removePoint(which){
+  if(which==='start'){ if(startMk){map.removeLayer(startMk);startMk=null;} startLL=null; }
+  else { if(endMk){map.removeLayer(endMk);endMk=null;} endLL=null; }
+  routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[]; avoidLayer.clearLayers();
+  document.getElementById('res').classList.remove('show');
+  setMode(which); // 次のタップでその地点だけ置き直し
 }
 function placePoint(which,latlng){
   if(which==='start'){ startLL=latlng;
     if(startMk)startMk.setLatLng(latlng); else{startMk=L.marker(latlng,{icon:pin('#1f8a5b'),draggable:true,zIndexOffset:500}).addTo(map);
+      bindPin(startMk,'start');
       startMk.on('dragend',e=>{startLL=e.target.getLatLng();route();});}
   }else{ endLL=latlng;
     if(endMk)endMk.setLatLng(latlng); else{endMk=L.marker(latlng,{icon:pin('#b3261e'),draggable:true,zIndexOffset:500}).addTo(map);
+      bindPin(endMk,'end');
       endMk.on('dragend',e=>{endLL=e.target.getLatLng();route();});}
   }
 }
 async function route(){
-  routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];
+  routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[]; avoidLayer.clearLayers();
   if(!startLL||!endLL)return;
   banner('ルート計算中…');
   try{
     const [sp,gp]=await Promise.all([ghRoute(false),ghRoute(true)]);
     banner('',false);
-    routeLayers.push(L.polyline(toLatLng(sp),{color:'#8a8f8c',weight:5,opacity:.85}).addTo(map));
+    routeLayers.push(L.polyline(toLatLng(sp),{color:'#3b5bdb',weight:5,opacity:.9}).addTo(map));
     routeLayers.push(L.polyline(toLatLng(gp),{color:'#1f8a5b',weight:6,opacity:.95}).addTo(map));
+    buildHighlights(sp); buildHighlights(gp);
     const sl=sp.distance, gl=gp.distance, pct=sl>0?Math.round((gl-sl)/sl*100):0;
     document.getElementById('sD').textContent=fmtKm(sl);
     document.getElementById('gD').textContent=fmtKm(gl);
@@ -164,17 +210,22 @@ async function route(){
   }
 }
 map.on('click',e=>{
-  if(!mode)return;                 // 何も選んでいない時のタップは無視＝誤操作でルートが消えない
+  if(!mode)return;               // 何も選んでいない時のタップは無視＝誤操作でルートが消えない
   placePoint(mode,e.latlng);
-  if(mode==='start'){ if(!endLL){setMode('end');} else {route();setMode(null);} }
+  const other = (mode==='start')?endLL:startLL;
+  if(!other){ setMode(mode==='start'?'end':'start'); }
   else { route(); setMode(null); }
 });
 document.getElementById('bStart').onclick=()=>setMode(mode==='start'?null:'start');
 document.getElementById('bEnd').onclick=()=>setMode(mode==='end'?null:'end');
 document.getElementById('bClear').onclick=()=>{
   [startMk,endMk].forEach(m=>{if(m)map.removeLayer(m);}); startMk=endMk=startLL=endLL=null;
-  routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[];
+  routeLayers.forEach(l=>map.removeLayer(l));routeLayers=[]; avoidLayer.clearLayers();
   document.getElementById('res').classList.remove('show'); setMode('start');
+};
+document.getElementById('tAvoid').onclick=(ev)=>{
+  avoidOn=ev.target.classList.toggle('on');
+  if(avoidOn)avoidLayer.addTo(map); else map.removeLayer(avoidLayer);
 };
 setMode('start');
 </script>
